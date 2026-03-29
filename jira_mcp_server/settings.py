@@ -103,3 +103,18 @@ _ALLOWED = os.getenv("ALLOWED_PROJECT_KEYS", "").strip()
 ALLOWED_PROJECT_KEYS = {k.strip().upper() for k in _ALLOWED.split(",") if k.strip()}
 
 MCP_API_KEY = os.getenv("MCP_API_KEY", "")
+
+WAHA_DB_HOST = os.getenv("WAHA_DB_HOST", "127.0.0.1")
+WAHA_DB_PORT = int(os.getenv("WAHA_DB_PORT", "5432"))
+WAHA_DB_NAME = os.getenv("WAHA_DB_NAME", "postgres")
+WAHA_DB_USER = os.getenv("WAHA_DB_USER", "postgres")
+WAHA_DB_PASSWORD = os.getenv("WAHA_DB_PASSWORD", "postgres")
+WAHA_DB_SSLMODE = os.getenv("WAHA_DB_SSLMODE", "prefer")
+
+JAZZMIN_SETTINGS = {
+    "site_title": "Beets Tasks Admin",
+    "site_header": "Beets Tasks",
+    "site_brand": "Beets Tasks",
+    "welcome_sign": "Welcome to Beets Tasks",
+    "copyright": "Beets Tasks",
+}

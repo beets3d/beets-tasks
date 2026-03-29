@@ -9,6 +9,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from .jira_client import JiraClient, JiraClientError, JiraForbiddenProjectError
 from .models import AccessLog
+from .waha_client import WahaClient, WahaClientError
 
 
 def _jsonrpc_result(rid: Any, result: dict[str, Any]) -> JsonResponse:
@@ -127,6 +128,74 @@ def _tools_description() -> list[dict[str, Any]]:
                 "additionalProperties": False,
             },
         },
+        {
+            "name": "waha_list_recent_chats",
+            "description": "List WhatsApp chats ordered by latest message time from WAHA message store.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+                },
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "waha_get_chat_messages",
+            "description": "Get messages for a chat from WAHA message store.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "chatId": {"type": "string"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 500},
+                    "before": {"type": "string", "description": "ISO timestamp; return messages before this value."},
+                },
+                "required": ["chatId"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "waha_search_messages",
+            "description": "Search WhatsApp messages by content keyword.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 200},
+                },
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "waha_get_messages_in_window",
+            "description": "Get WhatsApp messages in a time window. Use hours or startTime/endTime.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "hours": {"type": "integer", "minimum": 1, "maximum": 720},
+                    "startTime": {"type": "string", "description": "ISO datetime, e.g. 2026-03-29T08:00:00Z"},
+                    "endTime": {"type": "string", "description": "ISO datetime, e.g. 2026-03-29T10:00:00Z"},
+                    "chatId": {"type": "string"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 500},
+                },
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "waha_get_user_messages_recent_days",
+            "description": "Get User-role messages from recent N days with optional keyword and chat filter.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "days": {"type": "integer", "minimum": 1, "maximum": 90},
+                    "keyword": {"type": "string"},
+                    "chatId": {"type": "string"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 500},
+                },
+                "required": ["days"],
+                "additionalProperties": False,
+            },
+        },
     ]
 
 
@@ -158,6 +227,46 @@ def _handle_tool_call(name: str, arguments: dict[str, Any], client: JiraClient) 
         issue_key = arguments.get("issueKey", "")
         comment = arguments.get("comment", "")
         return client.add_comment(issue_key=issue_key, comment=comment)
+
+    if name == "waha_list_recent_chats":
+        waha = WahaClient()
+        return {"chats": waha.list_recent_chats(limit=arguments.get("limit", 20))}
+
+    if name == "waha_get_chat_messages":
+        waha = WahaClient()
+        return waha.get_chat_messages(
+            chat_id=arguments.get("chatId", ""),
+            limit=arguments.get("limit", 50),
+            before=arguments.get("before"),
+        )
+
+    if name == "waha_search_messages":
+        waha = WahaClient()
+        return {
+            "matches": waha.search_messages(
+                query=arguments.get("query", ""),
+                limit=arguments.get("limit", 50),
+            )
+        }
+
+    if name == "waha_get_messages_in_window":
+        waha = WahaClient()
+        return waha.get_messages_in_window(
+            start_time=arguments.get("startTime"),
+            end_time=arguments.get("endTime"),
+            hours=arguments.get("hours"),
+            chat_id=arguments.get("chatId"),
+            limit=arguments.get("limit", 100),
+        )
+
+    if name == "waha_get_user_messages_recent_days":
+        waha = WahaClient()
+        return waha.get_user_messages_recent_days(
+            days=arguments.get("days"),
+            keyword=arguments.get("keyword"),
+            chat_id=arguments.get("chatId"),
+            limit=arguments.get("limit", 100),
+        )
 
     raise JiraClientError(f"Unknown tool: {name}")
 
@@ -236,6 +345,8 @@ def mcp_endpoint(request: HttpRequest) -> JsonResponse:
         response = _jsonrpc_error(rid, -32003, str(exc))
     except JiraClientError as exc:
         response = _jsonrpc_error(rid, -32000, str(exc))
+    except WahaClientError as exc:
+        response = _jsonrpc_error(rid, -32010, str(exc))
     except json.JSONDecodeError:
         response = _jsonrpc_error(rid, -32700, "Invalid JSON")
     except Exception as exc:
