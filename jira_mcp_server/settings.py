@@ -32,6 +32,7 @@ _allowed_hosts.update({"127.0.0.1", "localhost", "testserver"})
 ALLOWED_HOSTS = sorted(_allowed_hosts)
 
 INSTALLED_APPS = [
+    "jazzmin",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -112,9 +113,49 @@ WAHA_DB_PASSWORD = os.getenv("WAHA_DB_PASSWORD", "postgres")
 WAHA_DB_SSLMODE = os.getenv("WAHA_DB_SSLMODE", "prefer")
 
 JAZZMIN_SETTINGS = {
-    "site_title": "Beets Tasks Admin",
-    "site_header": "Beets Tasks",
-    "site_brand": "Beets Tasks",
-    "welcome_sign": "Welcome to Beets Tasks",
-    "copyright": "Beets Tasks",
+    "site_title": "Beets Task",
+    "site_header": "Beets Task",
+    "site_brand": "Beets Task",
+    "welcome_sign": "Welcome to Beets Task",
+    "copyright": "Beets Task",
+    "site_logo_classes": "img-circle elevation-2",
+    "show_sidebar": True,
+    "navigation_expanded": True,
+    "hide_apps": [],
+    "hide_models": [],
+    "order_with_respect_to": [
+        "mcp_gateway",
+        "auth",
+    ],
+    "icons": {
+        "auth": "fas fa-users-cog",
+        "auth.user": "fas fa-user",
+        "auth.Group": "fas fa-users",
+        "mcp_gateway": "fas fa-plug",
+        "mcp_gateway.AccessLog": "fas fa-clock-rotate-left",
+    },
+    "topmenu_links": [
+        {"name": "Home", "url": "admin:index", "permissions": ["auth.view_user"]},
+        {"model": "mcp_gateway.AccessLog"},
+    ],
+    "show_ui_builder": False,
+    "changeform_format": "horizontal_tabs",
+    "language_chooser": False,
+}
+
+JAZZMIN_UI_TWEAKS = {
+    "theme": "flatly",
+    "dark_mode_theme": None,
+    "navbar": "navbar-white navbar-light",
+    "no_navbar_border": True,
+    "accent": "accent-teal",
+    "navbar_small_text": False,
+    "sidebar": "sidebar-light-info",
+    "sidebar_nav_small_text": False,
+    "sidebar_disable_expand": False,
+    "sidebar_nav_child_indent": True,
+    "sidebar_nav_compact_style": False,
+    "sidebar_nav_legacy_style": False,
+    "sidebar_nav_flat_style": False,
+    "theme_switcher": False,
 }
