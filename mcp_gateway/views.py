@@ -1,5 +1,6 @@
 import json
 import time
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from django.conf import settings
@@ -11,6 +12,31 @@ from .google_sheets_client import GoogleSheetsClient, GoogleSheetsClientError
 from .jira_client import JiraClient, JiraClientError, JiraForbiddenProjectError
 from .models import AccessLog
 from .waha_client import WahaClient, WahaClientError
+
+
+def _parse_sheet_date(raw: str) -> date | None:
+    value = (raw or "").strip()
+    if not value:
+        return None
+
+    compact = value.replace(" ", "")
+    fmts = [
+        "%d%b%Y",   # 28Apr2026
+        "%d%B%Y",   # 28April2026
+        "%d %b %Y", # 9 Oct 2025
+        "%d %B %Y", # 9 October 2025
+        "%d/%m/%Y", # 10/9/2026 (dd/mm/yyyy)
+        "%m/%d/%Y", # 10/9/2026 (mm/dd/yyyy)
+        "%Y-%m-%d", # 2026-09-10
+    ]
+    for fmt in fmts:
+        try:
+            if fmt in {"%d%b%Y", "%d%B%Y"}:
+                return datetime.strptime(compact, fmt).date()
+            return datetime.strptime(value, fmt).date()
+        except ValueError:
+            continue
+    return None
 
 
 def _jsonrpc_result(rid: Any, result: dict[str, Any]) -> JsonResponse:
@@ -266,6 +292,73 @@ def _tools_description() -> list[dict[str, Any]]:
                 "additionalProperties": False,
             },
         },
+        {
+            "name": "openclaw_sheets_list_tabs",
+            "description": "List tabs from the default OpenClaw Google Sheet configured in env.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "openclaw_sheets_read_range",
+            "description": "Read a range from the default OpenClaw Google Sheet configured in env.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "range": {"type": "string"},
+                    "majorDimension": {"type": "string", "enum": ["ROWS", "COLUMNS"]},
+                },
+                "required": ["range"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "openclaw_sheets_find_by_jira_id",
+            "description": "Find rows by Jira ID from the default OpenClaw Google Sheet.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "jiraId": {"type": "string"},
+                    "range": {"type": "string", "description": "Optional range, default Registered_Courses!A:Z"},
+                    "searchColumn": {"type": "string", "description": "Header name to match Jira ID, default Jira ID"},
+                },
+                "required": ["jiraId"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "openclaw_sheets_find_by_customer",
+            "description": "Find rows by customer name from the default OpenClaw Google Sheet.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "customer": {"type": "string"},
+                    "range": {"type": "string", "description": "Optional range, default Registered_Courses!A:Z"},
+                    "searchColumn": {"type": "string", "description": "Header name to match customer, default Customer"},
+                    "matchMode": {"type": "string", "enum": ["contains", "exact"]},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 200},
+                },
+                "required": ["customer"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "openclaw_sheets_find_expiring_courses",
+            "description": "Find courses with expiry date within a future window from the default OpenClaw Google Sheet.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "daysAhead": {"type": "integer", "minimum": 1, "maximum": 365},
+                    "includeExpired": {"type": "boolean"},
+                    "range": {"type": "string", "description": "Optional range, default Registered_Courses!A:Z"},
+                    "expiryColumn": {"type": "string", "description": "Header name for expiry date, default Expiry Date"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 500},
+                },
+                "additionalProperties": False,
+            },
+        },
     ]
 
 
@@ -371,6 +464,219 @@ def _handle_tool_call(name: str, arguments: dict[str, Any], client: JiraClient) 
             value_input_option=arguments.get("valueInputOption", "USER_ENTERED"),
             insert_data_option=arguments.get("insertDataOption", "INSERT_ROWS"),
         )
+
+    if name == "openclaw_sheets_list_tabs":
+        sheets = GoogleSheetsClient()
+        payload = sheets.get_spreadsheet()
+        tabs: list[dict[str, Any]] = []
+        for sheet in payload.get("sheets", []):
+            props = sheet.get("properties", {})
+            tabs.append(
+                {
+                    "sheetId": props.get("sheetId"),
+                    "title": props.get("title"),
+                    "index": props.get("index"),
+                }
+            )
+        return {
+            "spreadsheetId": payload.get("spreadsheetId"),
+            "title": payload.get("properties", {}).get("title"),
+            "tabs": tabs,
+        }
+
+    if name == "openclaw_sheets_read_range":
+        sheets = GoogleSheetsClient()
+        return sheets.get_values(
+            range_name=arguments.get("range", ""),
+            major_dimension=arguments.get("majorDimension"),
+        )
+
+    if name == "openclaw_sheets_find_by_jira_id":
+        jira_id = str(arguments.get("jiraId", "")).strip()
+        if not jira_id:
+            raise GoogleSheetsClientError("jiraId is required")
+
+        range_name = str(arguments.get("range", "") or "Registered_Courses!A:Z")
+        search_column = str(arguments.get("searchColumn", "") or "Jira ID")
+
+        sheets = GoogleSheetsClient()
+        payload = sheets.get_values(range_name=range_name, major_dimension="ROWS")
+        rows = payload.get("values", [])
+        if not rows:
+            return {
+                "jiraId": jira_id,
+                "range": range_name,
+                "searchColumn": search_column,
+                "count": 0,
+                "matches": [],
+            }
+
+        headers = [str(col).strip() for col in rows[0]]
+        try:
+            search_index = headers.index(search_column)
+        except ValueError as exc:
+            raise GoogleSheetsClientError(f"searchColumn not found in header: {search_column}") from exc
+
+        target = jira_id.upper()
+        matches: list[dict[str, Any]] = []
+        for row in rows[1:]:
+            if search_index >= len(row):
+                continue
+            cell = str(row[search_index]).strip().upper()
+            if cell != target:
+                continue
+            row_obj: dict[str, Any] = {}
+            for i, header in enumerate(headers):
+                if not header:
+                    continue
+                row_obj[header] = row[i] if i < len(row) else ""
+            matches.append(row_obj)
+
+        return {
+            "jiraId": jira_id,
+            "range": range_name,
+            "searchColumn": search_column,
+            "count": len(matches),
+            "matches": matches,
+        }
+
+    if name == "openclaw_sheets_find_by_customer":
+        customer = str(arguments.get("customer", "")).strip()
+        if not customer:
+            raise GoogleSheetsClientError("customer is required")
+
+        range_name = str(arguments.get("range", "") or "Registered_Courses!A:Z")
+        search_column = str(arguments.get("searchColumn", "") or "Customer")
+        match_mode = str(arguments.get("matchMode", "") or "contains").lower()
+        if match_mode not in {"contains", "exact"}:
+            raise GoogleSheetsClientError("matchMode must be one of: contains, exact")
+        limit = max(1, min(int(arguments.get("limit", 50)), 200))
+
+        sheets = GoogleSheetsClient()
+        payload = sheets.get_values(range_name=range_name, major_dimension="ROWS")
+        rows = payload.get("values", [])
+        if not rows:
+            return {
+                "customer": customer,
+                "range": range_name,
+                "searchColumn": search_column,
+                "matchMode": match_mode,
+                "count": 0,
+                "matches": [],
+            }
+
+        headers = [str(col).strip() for col in rows[0]]
+        try:
+            search_index = headers.index(search_column)
+        except ValueError as exc:
+            raise GoogleSheetsClientError(f"searchColumn not found in header: {search_column}") from exc
+
+        target = customer.upper()
+        matches: list[dict[str, Any]] = []
+        for row in rows[1:]:
+            if search_index >= len(row):
+                continue
+            cell = str(row[search_index]).strip()
+            cell_upper = cell.upper()
+            is_match = (cell_upper == target) if match_mode == "exact" else (target in cell_upper)
+            if not is_match:
+                continue
+
+            row_obj: dict[str, Any] = {}
+            for i, header in enumerate(headers):
+                if not header:
+                    continue
+                row_obj[header] = row[i] if i < len(row) else ""
+            matches.append(row_obj)
+            if len(matches) >= limit:
+                break
+
+        return {
+            "customer": customer,
+            "range": range_name,
+            "searchColumn": search_column,
+            "matchMode": match_mode,
+            "count": len(matches),
+            "matches": matches,
+        }
+
+    if name == "openclaw_sheets_find_expiring_courses":
+        days_ahead = max(1, min(int(arguments.get("daysAhead", 30)), 365))
+        include_expired = bool(arguments.get("includeExpired", False))
+        range_name = str(arguments.get("range", "") or "Registered_Courses!A:Z")
+        expiry_column = str(arguments.get("expiryColumn", "") or "Expiry Date")
+        limit = max(1, min(int(arguments.get("limit", 200)), 500))
+
+        sheets = GoogleSheetsClient()
+        payload = sheets.get_values(range_name=range_name, major_dimension="ROWS")
+        rows = payload.get("values", [])
+        if not rows:
+            return {
+                "daysAhead": days_ahead,
+                "includeExpired": include_expired,
+                "range": range_name,
+                "expiryColumn": expiry_column,
+                "count": 0,
+                "matches": [],
+                "unparsedDates": [],
+            }
+
+        headers = [str(col).strip() for col in rows[0]]
+        try:
+            expiry_index = headers.index(expiry_column)
+        except ValueError as exc:
+            raise GoogleSheetsClientError(f"expiryColumn not found in header: {expiry_column}") from exc
+
+        today = date.today()
+        end_date = today + timedelta(days=days_ahead)
+
+        matches: list[dict[str, Any]] = []
+        unparsed: list[str] = []
+
+        for row in rows[1:]:
+            if expiry_index >= len(row):
+                continue
+
+            expiry_raw = str(row[expiry_index]).strip()
+            if not expiry_raw:
+                continue
+
+            expiry_date = _parse_sheet_date(expiry_raw)
+            if expiry_date is None:
+                if expiry_raw not in unparsed:
+                    unparsed.append(expiry_raw)
+                continue
+
+            if include_expired:
+                in_window = expiry_date <= end_date
+            else:
+                in_window = today <= expiry_date <= end_date
+            if not in_window:
+                continue
+
+            row_obj: dict[str, Any] = {}
+            for i, header in enumerate(headers):
+                if not header:
+                    continue
+                row_obj[header] = row[i] if i < len(row) else ""
+            row_obj["_expiryDateISO"] = expiry_date.isoformat()
+            row_obj["_daysUntilExpiry"] = (expiry_date - today).days
+            matches.append(row_obj)
+
+        matches.sort(key=lambda x: x.get("_daysUntilExpiry", 999999))
+        matches = matches[:limit]
+
+        return {
+            "daysAhead": days_ahead,
+            "includeExpired": include_expired,
+            "range": range_name,
+            "expiryColumn": expiry_column,
+            "today": today.isoformat(),
+            "windowEnd": end_date.isoformat(),
+            "count": len(matches),
+            "matches": matches,
+            "unparsedDates": unparsed,
+        }
 
     raise JiraClientError(f"Unknown tool: {name}")
 

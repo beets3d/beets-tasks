@@ -270,6 +270,113 @@ Input:
 }
 ```
 
+### `openclaw_sheets_list_tabs`
+
+Input:
+
+```json
+{}
+```
+
+Notes:
+
+- Reads from `GOOGLE_SHEETS_DEFAULT_SPREADSHEET_ID`
+
+### `openclaw_sheets_read_range`
+
+Input:
+
+```json
+{
+  "range": "Registered_Courses!A1:F20"
+}
+```
+
+Notes:
+
+- Reads from `GOOGLE_SHEETS_DEFAULT_SPREADSHEET_ID`
+
+### `openclaw_sheets_find_by_jira_id`
+
+Input:
+
+```json
+{
+  "jiraId": "SL-1444"
+}
+```
+
+Optional input:
+
+```json
+{
+  "jiraId": "SL-1444",
+  "range": "Registered_Courses!A:Z",
+  "searchColumn": "Jira ID"
+}
+```
+
+Notes:
+
+- Reads from `GOOGLE_SHEETS_DEFAULT_SPREADSHEET_ID`
+- Returns `count` and `matches` (header-keyed row objects)
+
+### `openclaw_sheets_find_by_customer`
+
+Input:
+
+```json
+{
+  "customer": "10botics"
+}
+```
+
+Optional input:
+
+```json
+{
+  "customer": "Baptist",
+  "range": "Registered_Courses!A:Z",
+  "searchColumn": "Customer",
+  "matchMode": "contains",
+  "limit": 20
+}
+```
+
+Notes:
+
+- Reads from `GOOGLE_SHEETS_DEFAULT_SPREADSHEET_ID`
+- `matchMode` supports `contains` (default) and `exact`
+- Returns `count` and `matches` (header-keyed row objects)
+
+### `openclaw_sheets_find_expiring_courses`
+
+Input:
+
+```json
+{
+  "daysAhead": 30
+}
+```
+
+Optional input:
+
+```json
+{
+  "daysAhead": 45,
+  "includeExpired": false,
+  "range": "Registered_Courses!A:Z",
+  "expiryColumn": "Expiry Date",
+  "limit": 200
+}
+```
+
+Notes:
+
+- Reads from `GOOGLE_SHEETS_DEFAULT_SPREADSHEET_ID`
+- Returns rows with `_expiryDateISO` and `_daysUntilExpiry`
+- Includes `unparsedDates` for source values that failed date parsing
+
 ## Response Shape
 
 Success responses are JSON-RPC `result` objects.
@@ -349,6 +456,10 @@ Google Sheets variables (for `google_sheets_*` tools):
 - `GOOGLE_SHEETS_REFRESH_TOKEN`
 - `GOOGLE_SHEETS_DEFAULT_SPREADSHEET_ID`
 - `GOOGLE_SHEETS_SCOPES`
+
+OpenClaw-specific notes:
+
+- `openclaw_sheets_*` tools use `GOOGLE_SHEETS_DEFAULT_SPREADSHEET_ID` so clients do not need to pass `spreadsheetId` each call.
 
 Notes:
 
