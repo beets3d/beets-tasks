@@ -505,8 +505,9 @@ def _tools_description() -> list[dict[str, Any]]:
                 },
                 "additionalProperties": False,
             },
-            {
-                "name": "crm_list_customers",
+        },
+        {
+            "name": "crm_list_customers",
                 "description": "List customers from CRM with optional filters (search, type, important).",
                 "accessType": "read",
                 "inputSchema": {
@@ -539,10 +540,9 @@ def _tools_description() -> list[dict[str, Any]]:
                     },
                     "required": ["id", "fields"],
                     "additionalProperties": False,
-                },
-            },
-        },
-    ]
+                }
+            }
+        ]
 
 
 def _handle_tool_call(name: str, arguments: dict[str, Any], client: JiraClient) -> dict[str, Any]:
