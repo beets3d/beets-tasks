@@ -100,6 +100,7 @@ READ_TOOLS = {
     "jira_list_allowed_projects",
     "jira_search_issues",
     "jira_get_issue",
+    "jira_get_comments",
     "waha_list_recent_chats",
     "waha_get_chat_messages",
     "waha_search_messages",
@@ -172,7 +173,8 @@ def _tools_description() -> list[dict[str, Any]]:
         },
         {
             "name": "jira_get_issue",
-            "description": "Get one issue by key from allowed projects.",
+            "description": "[READ] Get one issue by key from allowed projects.",
+            "accessType": "read",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -184,8 +186,23 @@ def _tools_description() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "jira_get_comments",
+            "description": "[READ] Read comments for one issue in allowed projects.",
+            "accessType": "read",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "issueKey": {"type": "string"},
+                    "maxResults": {"type": "integer", "minimum": 1, "maximum": 100},
+                },
+                "required": ["issueKey"],
+                "additionalProperties": False,
+            },
+        },
+        {
             "name": "jira_update_issue",
-            "description": "Update issue fields for one issue in allowed projects.",
+            "description": "[WRITE] Update issue fields for one issue in allowed projects.",
+            "accessType": "write",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -198,7 +215,8 @@ def _tools_description() -> list[dict[str, Any]]:
         },
         {
             "name": "jira_add_comment",
-            "description": "Add a comment to one issue in allowed projects.",
+            "description": "[WRITE] Add a comment to one issue in allowed projects.",
+            "accessType": "write",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -434,6 +452,10 @@ def _handle_tool_call(name: str, arguments: dict[str, Any], client: JiraClient) 
     if name == "jira_get_issue":
         issue_key = arguments.get("issueKey", "")
         return client.get_issue(issue_key=issue_key, fields=arguments.get("fields"))
+
+    if name == "jira_get_comments":
+        issue_key = arguments.get("issueKey", "")
+        return client.get_comments(issue_key=issue_key, max_results=arguments.get("maxResults", 20))
 
     if name == "jira_update_issue":
         issue_key = arguments.get("issueKey", "")

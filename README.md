@@ -123,6 +123,21 @@ Input:
 }
 ```
 
+### `jira_get_comments`
+
+Input:
+
+```json
+{
+  "issueKey": "SL-123",
+  "maxResults": 20
+}
+```
+
+Notes:
+
+- Read Jira comments (READ)
+
 ### `jira_update_issue`
 
 Input:
@@ -146,6 +161,10 @@ Input:
   "comment": "This was added from MCP gateway."
 }
 ```
+
+Notes:
+
+- Add Jira comment (WRITE)
 
 ### `waha_list_recent_chats`
 
