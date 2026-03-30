@@ -96,6 +96,60 @@ def _log_access(
     )
 
 
+READ_TOOLS = {
+    "jira_list_allowed_projects",
+    "jira_search_issues",
+    "jira_get_issue",
+    "waha_list_recent_chats",
+    "waha_get_chat_messages",
+    "waha_search_messages",
+    "waha_get_messages_in_window",
+    "waha_get_user_messages_recent_days",
+    "google_sheets_get_spreadsheet",
+    "google_sheets_get_values",
+    "openclaw_sheets_list_tabs",
+    "openclaw_sheets_read_range",
+    "openclaw_sheets_find_by_jira_id",
+    "openclaw_sheets_find_by_customer",
+    "openclaw_sheets_find_expiring_courses",
+}
+
+WRITE_TOOLS = {
+    "jira_update_issue",
+    "jira_add_comment",
+    "google_sheets_update_values",
+    "google_sheets_append_values",
+}
+
+
+def _tool_access_type(method: str, tool_name: str) -> str:
+    if method != "tools/call":
+        return "core"
+    if tool_name in WRITE_TOOLS:
+        return "write"
+    if tool_name in READ_TOOLS:
+        return "read"
+    return "unknown"
+
+
+def _build_log_message(
+    *,
+    access_type: str,
+    method: str,
+    tool_name: str,
+    issue_key: str,
+    success: bool,
+    error_message: str = "",
+) -> str:
+    status = "ok" if success else "error"
+    target = f" issue={issue_key}" if issue_key else ""
+    action = tool_name or method
+    base = f"{access_type}:{action}{target}:{status}"
+    if not success and error_message:
+        return f"{base}:{error_message}"
+    return base
+
+
 def _tools_description() -> list[dict[str, Any]]:
     return [
         {
@@ -694,6 +748,7 @@ def mcp_endpoint(request: HttpRequest) -> JsonResponse:
     method = ""
     tool_name = ""
     issue_key = ""
+    access_type = "core"
     actor = request.headers.get("X-Actor", "")
     client_name = ""
 
@@ -725,6 +780,7 @@ def mcp_endpoint(request: HttpRequest) -> JsonResponse:
             name = params.get("name", "")
             arguments = params.get("arguments", {})
             tool_name = str(name)
+            access_type = _tool_access_type(method, tool_name)
             if not isinstance(arguments, dict):
                 raise JiraClientError("Tool arguments must be an object")
 
@@ -747,7 +803,13 @@ def mcp_endpoint(request: HttpRequest) -> JsonResponse:
             success=response.status_code < 400 and "error" not in json.loads(response.content.decode("utf-8")),
             status_code=response.status_code,
             duration_ms=int((time.time() - start) * 1000),
-            message="ok" if response.status_code < 400 else "error",
+            message=_build_log_message(
+                access_type=access_type,
+                method=method,
+                tool_name=tool_name,
+                issue_key=issue_key,
+                success=response.status_code < 400 and "error" not in json.loads(response.content.decode("utf-8")),
+            ),
         )
         return response
 
@@ -775,6 +837,13 @@ def mcp_endpoint(request: HttpRequest) -> JsonResponse:
         success=False,
         status_code=response.status_code,
         duration_ms=int((time.time() - start) * 1000),
-        message=json.loads(response.content.decode("utf-8")).get("error", {}).get("message", "error"),
+        message=_build_log_message(
+            access_type=access_type,
+            method=method or "unknown",
+            tool_name=tool_name,
+            issue_key=issue_key,
+            success=False,
+            error_message=json.loads(response.content.decode("utf-8")).get("error", {}).get("message", "error"),
+        ),
     )
     return response
