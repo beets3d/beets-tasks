@@ -7,6 +7,7 @@ from django.http import HttpRequest, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
+from .google_sheets_client import GoogleSheetsClient, GoogleSheetsClientError
 from .jira_client import JiraClient, JiraClientError, JiraForbiddenProjectError
 from .models import AccessLog
 from .waha_client import WahaClient, WahaClientError
@@ -196,6 +197,75 @@ def _tools_description() -> list[dict[str, Any]]:
                 "additionalProperties": False,
             },
         },
+        {
+            "name": "google_sheets_get_spreadsheet",
+            "description": "Get spreadsheet metadata and sheet list from Google Sheets.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "spreadsheetId": {"type": "string"},
+                    "ranges": {"type": "array", "items": {"type": "string"}},
+                },
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "google_sheets_get_values",
+            "description": "Read values from a Google Sheets range.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "spreadsheetId": {"type": "string"},
+                    "range": {"type": "string"},
+                    "majorDimension": {"type": "string", "enum": ["ROWS", "COLUMNS"]},
+                },
+                "required": ["range"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "google_sheets_update_values",
+            "description": "Overwrite values in a Google Sheets range.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "spreadsheetId": {"type": "string"},
+                    "range": {"type": "string"},
+                    "values": {
+                        "type": "array",
+                        "items": {
+                            "type": "array",
+                            "items": {},
+                        },
+                    },
+                    "valueInputOption": {"type": "string", "enum": ["RAW", "USER_ENTERED"]},
+                },
+                "required": ["range", "values"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "google_sheets_append_values",
+            "description": "Append rows to a Google Sheets range.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "spreadsheetId": {"type": "string"},
+                    "range": {"type": "string"},
+                    "values": {
+                        "type": "array",
+                        "items": {
+                            "type": "array",
+                            "items": {},
+                        },
+                    },
+                    "valueInputOption": {"type": "string", "enum": ["RAW", "USER_ENTERED"]},
+                    "insertDataOption": {"type": "string", "enum": ["OVERWRITE", "INSERT_ROWS"]},
+                },
+                "required": ["range", "values"],
+                "additionalProperties": False,
+            },
+        },
     ]
 
 
@@ -266,6 +336,40 @@ def _handle_tool_call(name: str, arguments: dict[str, Any], client: JiraClient) 
             keyword=arguments.get("keyword"),
             chat_id=arguments.get("chatId"),
             limit=arguments.get("limit", 100),
+        )
+
+    if name == "google_sheets_get_spreadsheet":
+        sheets = GoogleSheetsClient()
+        return sheets.get_spreadsheet(
+            spreadsheet_id=arguments.get("spreadsheetId"),
+            ranges=arguments.get("ranges"),
+        )
+
+    if name == "google_sheets_get_values":
+        sheets = GoogleSheetsClient()
+        return sheets.get_values(
+            spreadsheet_id=arguments.get("spreadsheetId"),
+            range_name=arguments.get("range", ""),
+            major_dimension=arguments.get("majorDimension"),
+        )
+
+    if name == "google_sheets_update_values":
+        sheets = GoogleSheetsClient()
+        return sheets.update_values(
+            spreadsheet_id=arguments.get("spreadsheetId"),
+            range_name=arguments.get("range", ""),
+            values=arguments.get("values", []),
+            value_input_option=arguments.get("valueInputOption", "USER_ENTERED"),
+        )
+
+    if name == "google_sheets_append_values":
+        sheets = GoogleSheetsClient()
+        return sheets.append_values(
+            spreadsheet_id=arguments.get("spreadsheetId"),
+            range_name=arguments.get("range", ""),
+            values=arguments.get("values", []),
+            value_input_option=arguments.get("valueInputOption", "USER_ENTERED"),
+            insert_data_option=arguments.get("insertDataOption", "INSERT_ROWS"),
         )
 
     raise JiraClientError(f"Unknown tool: {name}")
@@ -347,6 +451,8 @@ def mcp_endpoint(request: HttpRequest) -> JsonResponse:
         response = _jsonrpc_error(rid, -32000, str(exc))
     except WahaClientError as exc:
         response = _jsonrpc_error(rid, -32010, str(exc))
+    except GoogleSheetsClientError as exc:
+        response = _jsonrpc_error(rid, -32020, str(exc))
     except json.JSONDecodeError:
         response = _jsonrpc_error(rid, -32700, "Invalid JSON")
     except Exception as exc:

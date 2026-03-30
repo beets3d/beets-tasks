@@ -220,6 +220,56 @@ Notes:
 - Always filters `role = User`
 - `keyword` and `chatId` are optional
 
+### `google_sheets_get_spreadsheet`
+
+Input:
+
+```json
+{
+  "spreadsheetId": "your-spreadsheet-id"
+}
+```
+
+### `google_sheets_get_values`
+
+Input:
+
+```json
+{
+  "spreadsheetId": "your-spreadsheet-id",
+  "range": "Sheet1!A1:C20"
+}
+```
+
+### `google_sheets_update_values`
+
+Input:
+
+```json
+{
+  "spreadsheetId": "your-spreadsheet-id",
+  "range": "Sheet1!A1:C2",
+  "values": [
+    ["Name", "Status", "Owner"],
+    ["Demo", "Open", "Kevin"]
+  ]
+}
+```
+
+### `google_sheets_append_values`
+
+Input:
+
+```json
+{
+  "spreadsheetId": "your-spreadsheet-id",
+  "range": "Sheet1!A:C",
+  "values": [
+    ["New row", "Queued", "Bot"]
+  ]
+}
+```
+
 ## Response Shape
 
 Success responses are JSON-RPC `result` objects.
@@ -263,6 +313,12 @@ Common error cases:
 
 ## Server Configuration
 
+Quick start:
+
+1. Copy `.env.example` to `.env`
+2. Fill real credentials and secrets in `.env`
+3. Keep `.env` out of source control (already ignored by `.gitignore`)
+
 Required environment variables:
 
 - `JIRA_BASE_URL` (normally `https://api.atlassian.com`)
@@ -280,6 +336,23 @@ WAHA read access variables (for `waha_*` tools):
 - `WAHA_DB_USER`
 - `WAHA_DB_PASSWORD`
 - `WAHA_DB_SSLMODE`
+
+Google Sheets variables (for `google_sheets_*` tools):
+
+- `GOOGLE_SHEETS_PROJECT_ID`
+- `GOOGLE_SHEETS_CLIENT_ID`
+- `GOOGLE_SHEETS_CLIENT_SECRET`
+- `GOOGLE_SHEETS_AUTH_URI`
+- `GOOGLE_SHEETS_TOKEN_URI`
+- `GOOGLE_SHEETS_AUTH_PROVIDER_CERT_URL`
+- `GOOGLE_SHEETS_REDIRECT_URI`
+- `GOOGLE_SHEETS_REFRESH_TOKEN`
+- `GOOGLE_SHEETS_DEFAULT_SPREADSHEET_ID`
+- `GOOGLE_SHEETS_SCOPES`
+
+Notes:
+
+- The provided Google OAuth client is an installed-app credential, so you still need a valid `GOOGLE_SHEETS_REFRESH_TOKEN` before read or write calls can succeed.
 
 Also set:
 

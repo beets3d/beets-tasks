@@ -1,5 +1,8 @@
 Django==5.1.7
 django-jazzmin==3.0.1
+google-api-python-client==2.166.0
+google-auth==2.38.0
+google-auth-httplib2==0.2.0
 requests==2.32.3
 pysqlite3-binary==0.5.4
 psycopg[binary]==3.2.1

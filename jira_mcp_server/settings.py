@@ -21,11 +21,11 @@ def _load_env_file(path: Path) -> None:
 
 _load_env_file(BASE_DIR / ".env")
 
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-change-me")
-DEBUG = os.getenv("DJANGO_DEBUG", "False").lower() == "true"
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY") or ""
+DEBUG = (os.getenv("DJANGO_DEBUG") or "").lower() == "true"
 _allowed_hosts = {
     h.strip()
-    for h in os.getenv("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost,testserver").split(",")
+    for h in (os.getenv("DJANGO_ALLOWED_HOSTS") or "").split(",")
     if h.strip()
 }
 _allowed_hosts.update({"127.0.0.1", "localhost", "testserver"})
@@ -95,22 +95,37 @@ STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-JIRA_BASE_URL = os.getenv("JIRA_BASE_URL", "https://api.atlassian.com").rstrip("/")
-JIRA_CLOUD_ID = os.getenv("JIRA_CLOUD_ID", "")
-JIRA_EMAIL = os.getenv("JIRA_EMAIL", "")
-JIRA_API_TOKEN = os.getenv("JIRA_API_TOKEN", "")
+JIRA_BASE_URL = (os.getenv("JIRA_BASE_URL") or "").rstrip("/")
+JIRA_CLOUD_ID = os.getenv("JIRA_CLOUD_ID") or ""
+JIRA_EMAIL = os.getenv("JIRA_EMAIL") or ""
+JIRA_API_TOKEN = os.getenv("JIRA_API_TOKEN") or ""
 
-_ALLOWED = os.getenv("ALLOWED_PROJECT_KEYS", "").strip()
+_ALLOWED = (os.getenv("ALLOWED_PROJECT_KEYS") or "").strip()
 ALLOWED_PROJECT_KEYS = {k.strip().upper() for k in _ALLOWED.split(",") if k.strip()}
 
-MCP_API_KEY = os.getenv("MCP_API_KEY", "")
+MCP_API_KEY = os.getenv("MCP_API_KEY") or ""
 
-WAHA_DB_HOST = os.getenv("WAHA_DB_HOST", "127.0.0.1")
-WAHA_DB_PORT = int(os.getenv("WAHA_DB_PORT", "5432"))
-WAHA_DB_NAME = os.getenv("WAHA_DB_NAME", "postgres")
-WAHA_DB_USER = os.getenv("WAHA_DB_USER", "postgres")
-WAHA_DB_PASSWORD = os.getenv("WAHA_DB_PASSWORD", "postgres")
-WAHA_DB_SSLMODE = os.getenv("WAHA_DB_SSLMODE", "prefer")
+GOOGLE_SHEETS_PROJECT_ID = os.getenv("GOOGLE_SHEETS_PROJECT_ID") or ""
+GOOGLE_SHEETS_CLIENT_ID = os.getenv("GOOGLE_SHEETS_CLIENT_ID") or ""
+GOOGLE_SHEETS_CLIENT_SECRET = os.getenv("GOOGLE_SHEETS_CLIENT_SECRET") or ""
+GOOGLE_SHEETS_AUTH_URI = os.getenv("GOOGLE_SHEETS_AUTH_URI") or ""
+GOOGLE_SHEETS_TOKEN_URI = os.getenv("GOOGLE_SHEETS_TOKEN_URI") or ""
+GOOGLE_SHEETS_AUTH_PROVIDER_CERT_URL = os.getenv("GOOGLE_SHEETS_AUTH_PROVIDER_CERT_URL") or ""
+GOOGLE_SHEETS_REDIRECT_URI = os.getenv("GOOGLE_SHEETS_REDIRECT_URI") or ""
+GOOGLE_SHEETS_REFRESH_TOKEN = os.getenv("GOOGLE_SHEETS_REFRESH_TOKEN") or ""
+GOOGLE_SHEETS_DEFAULT_SPREADSHEET_ID = os.getenv("GOOGLE_SHEETS_DEFAULT_SPREADSHEET_ID") or ""
+GOOGLE_SHEETS_SCOPES = [
+    scope.strip()
+    for scope in (os.getenv("GOOGLE_SHEETS_SCOPES") or "").split(",")
+    if scope.strip()
+]
+
+WAHA_DB_HOST = os.getenv("WAHA_DB_HOST") or ""
+WAHA_DB_PORT = int((os.getenv("WAHA_DB_PORT") or "0"))
+WAHA_DB_NAME = os.getenv("WAHA_DB_NAME") or ""
+WAHA_DB_USER = os.getenv("WAHA_DB_USER") or ""
+WAHA_DB_PASSWORD = os.getenv("WAHA_DB_PASSWORD") or ""
+WAHA_DB_SSLMODE = os.getenv("WAHA_DB_SSLMODE") or ""
 
 JAZZMIN_SETTINGS = {
     "site_title": "Beets Task",

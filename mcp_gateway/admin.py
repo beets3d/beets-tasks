@@ -16,6 +16,7 @@ class IntegrationFilter(admin.SimpleListFilter):
         return (
             ("jira", "Jira"),
             ("waha", "WAHA"),
+            ("google", "Google Sheets"),
             ("core", "MCP Core"),
             ("other", "Other"),
         )
@@ -26,10 +27,17 @@ class IntegrationFilter(admin.SimpleListFilter):
             return queryset.filter(tool_name__startswith="jira_")
         if value == "waha":
             return queryset.filter(tool_name__startswith="waha_")
+        if value == "google":
+            return queryset.filter(tool_name__startswith="google_sheets_")
         if value == "core":
             return queryset.filter(tool_name="")
         if value == "other":
-            return queryset.exclude(tool_name="").exclude(tool_name__startswith="jira_").exclude(tool_name__startswith="waha_")
+            return (
+                queryset.exclude(tool_name="")
+                .exclude(tool_name__startswith="jira_")
+                .exclude(tool_name__startswith="waha_")
+                .exclude(tool_name__startswith="google_sheets_")
+            )
         return queryset
 
 
