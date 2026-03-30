@@ -1,0 +1,20 @@
+[Unit]
+Description=Jira MCP Django Service (gunicorn)
+After=network.target
+
+[Service]
+Type=simple
+# Replace 'deploy_user' with the user that should run the service (e.g. www-data or your account)
+User=deploy_user
+WorkingDirectory=/root/projects/beets-tasks
+Environment=PATH=/root/projects/beets-tasks/.venv/bin
+# If you use a virtualenv, ensure the PATH above points to its bin directory
+ExecStart=/root/projects/beets-tasks/.venv/bin/gunicorn jira_mcp_server.wsgi:application \
+  --bind 0.0.0.0:8001 \
+  --workers 2 \
+  --timeout 120
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

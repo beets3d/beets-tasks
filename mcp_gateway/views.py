@@ -9,9 +9,11 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from .google_sheets_client import GoogleSheetsClient, GoogleSheetsClientError
+from .google_calendar_client import GoogleCalendarClient, GoogleCalendarClientError
 from .jira_client import JiraClient, JiraClientError, JiraForbiddenProjectError
 from .models import AccessLog
 from .waha_client import WahaClient, WahaClientError
+from crm.models import Customer
 
 
 def _parse_sheet_date(raw: str) -> date | None:
@@ -113,6 +115,8 @@ READ_TOOLS = {
     "openclaw_sheets_find_by_jira_id",
     "openclaw_sheets_find_by_customer",
     "openclaw_sheets_find_expiring_courses",
+    "crm_list_customers",
+    "crm_get_customer",
 }
 
 WRITE_TOOLS = {
@@ -120,6 +124,7 @@ WRITE_TOOLS = {
     "jira_add_comment",
     "google_sheets_update_values",
     "google_sheets_append_values",
+    "crm_update_customer",
 }
 
 
@@ -224,6 +229,38 @@ def _tools_description() -> list[dict[str, Any]]:
                     "comment": {"type": "string"},
                 },
                 "required": ["issueKey", "comment"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "jira_create_issue_link",
+            "description": "[WRITE] Create a link between two Jira issues (issueLink).",
+            "accessType": "write",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "sourceIssue": {"type": "string"},
+                    "targetIssue": {"type": "string"},
+                    "linkType": {"type": "string"},
+                    "comment": {"type": "string"},
+                },
+                "required": ["sourceIssue", "targetIssue"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "jira_create_remote_link",
+            "description": "[WRITE] Attach an external URL (remote link) to a Jira issue.",
+            "accessType": "write",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "issueKey": {"type": "string"},
+                    "url": {"type": "string"},
+                    "title": {"type": "string"},
+                    "summary": {"type": "string"},
+                },
+                "required": ["issueKey", "url"],
                 "additionalProperties": False,
             },
         },
@@ -365,6 +402,44 @@ def _tools_description() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "google_calendar_list",
+            "description": "List calendars available to the service account / token.",
+            "accessType": "read",
+            "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+        {
+            "name": "google_calendar_list_events",
+            "description": "List events from a calendar.",
+            "accessType": "read",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "calendarId": {"type": "string"},
+                    "timeMin": {"type": "string"},
+                    "timeMax": {"type": "string"},
+                    "maxResults": {"type": "integer", "minimum": 1, "maximum": 250},
+                },
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "google_calendar_list_events_filtered",
+            "description": "List events filtered by date (or start/end) and person (attendee email or name).",
+            "accessType": "read",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "calendarId": {"type": "string"},
+                    "date": {"type": "string", "description": "ISO date YYYY-MM-DD (returns events for that day)"},
+                    "timeMin": {"type": "string"},
+                    "timeMax": {"type": "string"},
+                    "person": {"type": "string", "description": "email or display name to filter attendees"},
+                    "maxResults": {"type": "integer", "minimum": 1, "maximum": 250},
+                },
+                "additionalProperties": False,
+            },
+        },
+        {
             "name": "openclaw_sheets_list_tabs",
             "description": "List tabs from the default OpenClaw Google Sheet configured in env.",
             "inputSchema": {
@@ -430,6 +505,42 @@ def _tools_description() -> list[dict[str, Any]]:
                 },
                 "additionalProperties": False,
             },
+            {
+                "name": "crm_list_customers",
+                "description": "List customers from CRM with optional filters (search, type, important).",
+                "accessType": "read",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "search text for name, company or email"},
+                        "customerType": {"type": "string"},
+                        "important": {"type": "boolean"},
+                        "limit": {"type": "integer", "minimum": 1, "maximum": 1000},
+                        "offset": {"type": "integer", "minimum": 0},
+                    },
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "crm_get_customer",
+                "description": "Get one customer by id.",
+                "accessType": "read",
+                "inputSchema": {"type": "object", "properties": {"id": {"type": "integer"}}, "required": ["id"], "additionalProperties": False},
+            },
+            {
+                "name": "crm_update_customer",
+                "description": "Update fields on one customer by id.",
+                "accessType": "write",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "integer"},
+                        "fields": {"type": "object"},
+                    },
+                    "required": ["id", "fields"],
+                    "additionalProperties": False,
+                },
+            },
         },
     ]
 
@@ -466,6 +577,24 @@ def _handle_tool_call(name: str, arguments: dict[str, Any], client: JiraClient) 
         issue_key = arguments.get("issueKey", "")
         comment = arguments.get("comment", "")
         return client.add_comment(issue_key=issue_key, comment=comment)
+
+    if name == "jira_create_issue_link":
+        source = str(arguments.get("sourceIssue", "") or "").strip()
+        target = str(arguments.get("targetIssue", "") or "").strip()
+        link_type = str(arguments.get("linkType", "Relates") or "Relates").strip()
+        comment = arguments.get("comment")
+        if not source or not target:
+            raise JiraClientError("sourceIssue and targetIssue are required")
+        return client.create_issue_link(source_issue=source, target_issue=target, link_type=link_type, comment=comment)
+
+    if name == "jira_create_remote_link":
+        issue_key = str(arguments.get("issueKey", "") or "").strip()
+        url = str(arguments.get("url", "") or "").strip()
+        title = arguments.get("title")
+        summary = arguments.get("summary")
+        if not issue_key or not url:
+            raise JiraClientError("issueKey and url are required")
+        return client.create_remote_link(issue_key=issue_key, url=url, title=title, summary=summary)
 
     if name == "waha_list_recent_chats":
         waha = WahaClient()
@@ -540,6 +669,75 @@ def _handle_tool_call(name: str, arguments: dict[str, Any], client: JiraClient) 
             value_input_option=arguments.get("valueInputOption", "USER_ENTERED"),
             insert_data_option=arguments.get("insertDataOption", "INSERT_ROWS"),
         )
+
+    if name == "google_calendar_list":
+        gc = GoogleCalendarClient()
+        return gc.get_calendar_list()
+
+    if name == "google_calendar_list_events":
+        gc = GoogleCalendarClient()
+        return gc.list_events(
+            calendar_id=arguments.get("calendarId", "primary"),
+            time_min=arguments.get("timeMin"),
+            time_max=arguments.get("timeMax"),
+            max_results=arguments.get("maxResults", 250),
+            single_events=arguments.get("singleEvents", True),
+            order_by=arguments.get("orderBy", "startTime"),
+        )
+
+    if name == "google_calendar_list_events_filtered":
+        gc = GoogleCalendarClient()
+        cal_id = arguments.get("calendarId", "primary")
+        person = (arguments.get("person") or "").strip()
+        date_arg = (arguments.get("date") or "").strip()
+        time_min = arguments.get("timeMin")
+        time_max = arguments.get("timeMax")
+        max_results = int(arguments.get("maxResults", 250))
+
+        # If date is provided, construct a full-day range in UTC
+        if date_arg and not (time_min or time_max):
+            try:
+                from datetime import datetime, timedelta
+
+                d = datetime.strptime(date_arg, "%Y-%m-%d")
+                time_min = d.strftime("%Y-%m-%dT00:00:00Z")
+                time_max = (d + timedelta(days=1)).strftime("%Y-%m-%dT00:00:00Z")
+            except Exception:
+                # ignore parse errors and fall back to provided timeMin/timeMax
+                pass
+
+        payload = gc.list_events(
+            calendar_id=cal_id,
+            time_min=time_min,
+            time_max=time_max,
+            max_results=max_results,
+            single_events=True,
+            order_by="startTime",
+        )
+
+        events = payload.get("items", []) if isinstance(payload, dict) else []
+        if person:
+            person_lower = person.lower()
+            filtered = []
+            for ev in events:
+                matched = False
+                # check attendees
+                for a in ev.get("attendees", []) or []:
+                    email = (a.get("email") or "").lower()
+                    name = (a.get("displayName") or "").lower()
+                    if person_lower in email or person_lower in name:
+                        matched = True
+                        break
+                # check organizer if not matched
+                if not matched:
+                    org = ev.get("organizer", {}) or {}
+                    if person_lower in (org.get("email", "") or "").lower() or person_lower in (org.get("displayName", "") or "").lower():
+                        matched = True
+                if matched:
+                    filtered.append(ev)
+            events = filtered
+
+        return {"count": len(events), "items": events}
 
     if name == "openclaw_sheets_list_tabs":
         sheets = GoogleSheetsClient()
@@ -753,6 +951,141 @@ def _handle_tool_call(name: str, arguments: dict[str, Any], client: JiraClient) 
             "matches": matches,
             "unparsedDates": unparsed,
         }
+
+    if name == "crm_list_customers":
+        query_text = str(arguments.get("query", "") or "").strip()
+        ctype = arguments.get("customerType")
+        important = arguments.get("important")
+        limit = max(1, min(int(arguments.get("limit", 100)), 1000))
+        offset = max(0, int(arguments.get("offset", 0)))
+
+        qs = Customer.objects.all()
+        if ctype:
+            qs = qs.filter(customer_type=str(ctype))
+        if important is not None:
+            qs = qs.filter(important=bool(important))
+        if query_text:
+            from django.db.models import Q
+
+            q = Q(name__icontains=query_text) | Q(company_name__icontains=query_text) | Q(email__icontains=query_text) | Q(external_id__icontains=query_text)
+            qs = qs.filter(q)
+
+        total = qs.count()
+        items = []
+        for obj in qs.order_by("-updated_at")[offset : offset + limit]:
+            items.append({
+                "id": obj.id,
+                "name": obj.name,
+                "external_id": obj.external_id,
+                "company_name": obj.company_name,
+                "email": obj.email,
+                "phone": obj.phone,
+                "mobile": obj.mobile,
+                "important": obj.important,
+                "customer_type": obj.customer_type,
+                "last_contact": obj.last_contact.isoformat() if obj.last_contact else None,
+                "sheet_last_updated": obj.sheet_last_updated.isoformat() if obj.sheet_last_updated else None,
+                "sheet_tag": obj.sheet_tag,
+                "updated_at": obj.updated_at.isoformat() if obj.updated_at else None,
+            })
+
+        return {"total": total, "count": len(items), "items": items}
+
+    if name == "crm_get_customer":
+        cid = int(arguments.get("id", 0))
+        if not cid:
+            raise JiraClientError("id is required")
+        obj = Customer.objects.filter(id=cid).first()
+        if not obj:
+            raise JiraClientError("customer not found")
+        return {
+            "id": obj.id,
+            "name": obj.name,
+            "external_id": obj.external_id,
+            "company_name": obj.company_name,
+            "street_address": obj.street_address,
+            "city": obj.city,
+            "state": obj.state,
+            "country": obj.country,
+            "zip_code": obj.zip_code,
+            "email": obj.email,
+            "phone": obj.phone,
+            "mobile": obj.mobile,
+            "remark": obj.remark,
+            "important": obj.important,
+            "customer_type": obj.customer_type,
+            "last_contact": obj.last_contact.isoformat() if obj.last_contact else None,
+            "sheet_last_updated": obj.sheet_last_updated.isoformat() if obj.sheet_last_updated else None,
+            "sheet_updated_by": obj.sheet_updated_by,
+            "sheet_tag": obj.sheet_tag,
+            "updated_at": obj.updated_at.isoformat() if obj.updated_at else None,
+        }
+
+    if name == "crm_update_customer":
+        cid = int(arguments.get("id", 0))
+        fields = arguments.get("fields", {}) or {}
+        if not cid:
+            raise JiraClientError("id is required")
+        if not isinstance(fields, dict):
+            raise JiraClientError("fields must be an object")
+        obj = Customer.objects.filter(id=cid).first()
+        if not obj:
+            raise JiraClientError("customer not found")
+
+        # allow 'type' as an alias for 'customer_type'
+        if "type" in fields and "customer_type" not in fields:
+            fields["customer_type"] = fields.get("type")
+
+        allowed = {
+            "name",
+            "company_name",
+            "street_address",
+            "city",
+            "state",
+            "country",
+            "zip_code",
+            "email",
+            "phone",
+            "mobile",
+            "remark",
+            "important",
+            "customer_type",
+            "last_contact",
+        }
+
+        # allowed customer_type values
+        allowed_types = [t[0] for t in getattr(Customer, "CUSTOMER_TYPE_CHOICES", [])]
+
+        for k, v in fields.items():
+            if k not in allowed:
+                continue
+            if k == "last_contact":
+                try:
+                    from django.utils.dateparse import parse_datetime
+
+                    parsed = parse_datetime(str(v))
+                    obj.last_contact = parsed
+                except Exception:
+                    obj.last_contact = None
+            elif k == "important":
+                # coerce common truthy values to boolean
+                if isinstance(v, str):
+                    obj.important = str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
+                else:
+                    obj.important = bool(v)
+            elif k == "customer_type":
+                if v is None:
+                    obj.customer_type = ""
+                else:
+                    val = str(v)
+                    if allowed_types and val not in allowed_types:
+                        raise JiraClientError(f"invalid customer_type: {val}")
+                    obj.customer_type = val
+            else:
+                setattr(obj, k, v)
+
+        obj.save()
+        return {"id": obj.id, "updated": True}
 
     raise JiraClientError(f"Unknown tool: {name}")
 

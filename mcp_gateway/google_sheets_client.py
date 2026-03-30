@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from typing import Any
+import threading
+from typing import Optional
+from threading import Lock, Event
 
 from django.conf import settings
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from google.auth import exceptions as auth_exceptions
 
 
 class GoogleSheetsClientError(Exception):
@@ -30,8 +34,26 @@ class GoogleSheetsClient:
             client_secret=settings.GOOGLE_SHEETS_CLIENT_SECRET,
             scopes=settings.GOOGLE_SHEETS_SCOPES,
         )
-        creds.refresh(Request())
-        self.service = build("sheets", "v4", credentials=creds, cache_discovery=False)
+        # keep creds and a lock for thread-safe refresh
+        self.creds = creds
+        self._creds_lock = Lock()
+        try:
+            with self._creds_lock:
+                self.creds.refresh(Request())
+        except Exception as exc:
+            raise GoogleSheetsClientError(f"Failed to refresh credentials: {exc}") from exc
+        self.service = build("sheets", "v4", credentials=self.creds, cache_discovery=False)
+
+        # start background refresher thread
+        self._stop_event: Event = Event()
+        interval = getattr(settings, "GOOGLE_SHEETS_REFRESH_INTERVAL_SECONDS", 2700)
+        try:
+            interval = int(interval)
+        except Exception:
+            interval = 2700
+        self._refresh_interval = max(60, interval)
+        self._refresher_thread: Optional[threading.Thread] = None
+        self._start_refresher()
 
     @staticmethod
     def _resolve_spreadsheet_id(spreadsheet_id: str | None) -> str:
@@ -41,6 +63,12 @@ class GoogleSheetsClient:
         return candidate
 
     def _execute(self, request: Any) -> dict[str, Any]:
+        # ensure token is fresh before executing
+        try:
+            self._refresh_if_needed()
+        except Exception:
+            # proceed and let the request surface errors
+            pass
         try:
             result = request.execute()
         except HttpError as exc:
@@ -50,6 +78,40 @@ class GoogleSheetsClient:
         if isinstance(result, dict):
             return result
         return {"result": result}
+
+    def _refresh_if_needed(self) -> None:
+        """Refresh credentials if expired or token missing."""
+        if not getattr(self, "creds", None):
+            return
+        try:
+            if not self.creds.valid or self.creds.expired or not self.creds.token:
+                with self._creds_lock:
+                    if not self.creds.valid or self.creds.expired or not self.creds.token:
+                        self.creds.refresh(Request())
+        except auth_exceptions.RefreshError as exc:
+            raise GoogleSheetsClientError(f"Failed to refresh access token: {exc}") from exc
+        except Exception as exc:
+            raise GoogleSheetsClientError(f"Unexpected error refreshing token: {exc}") from exc
+
+    def _refresher_loop(self) -> None:
+        while not self._stop_event.wait(self._refresh_interval):
+            try:
+                self._refresh_if_needed()
+            except Exception:
+                pass
+
+    def _start_refresher(self) -> None:
+        if self._refresher_thread and self._refresher_thread.is_alive():
+            return
+        th = threading.Thread(target=self._refresher_loop, daemon=True, name="gsheets-refresher")
+        th.start()
+        self._refresher_thread = th
+
+    def close(self) -> None:
+        try:
+            self._stop_event.set()
+        except Exception:
+            pass
 
     def get_spreadsheet(self, *, spreadsheet_id: str | None = None, ranges: list[str] | None = None) -> dict[str, Any]:
         return self._execute(

@@ -4,3 +4,5 @@ staticfiles/
 .env
 .venv
 db.sqlite3
+django.pid
+django.log

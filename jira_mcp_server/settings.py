@@ -28,7 +28,7 @@ _allowed_hosts = {
     for h in (os.getenv("DJANGO_ALLOWED_HOSTS") or "").split(",")
     if h.strip()
 }
-_allowed_hosts.update({"127.0.0.1", "localhost", "testserver"})
+_allowed_hosts.update({"127.0.0.1", "localhost", "tasks.beets3d.cn"})
 ALLOWED_HOSTS = sorted(_allowed_hosts)
 
 INSTALLED_APPS = [
@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "mcp_gateway",
+    "crm",
 ]
 
 MIDDLEWARE = [
@@ -120,6 +121,40 @@ GOOGLE_SHEETS_SCOPES = [
     if scope.strip()
 ]
 
+# CSRF trusted origins. Provide via env `CSRF_TRUSTED_ORIGINS` as comma-separated
+# values including scheme and port, e.g. 'http://localhost:8001,http://127.0.0.1:8001'
+_explicit_csrf = [
+    s.strip()
+    for s in (os.getenv("CSRF_TRUSTED_ORIGINS") or "http://localhost:8001,http://127.0.0.1:8001").split(",")
+    if s.strip()
+]
+
+# Also include origins derived from ALLOWED_HOSTS (both http and https)
+derived_csrf = []
+for h in sorted(ALLOWED_HOSTS):
+    if not h:
+        continue
+    if h in {"127.0.0.1", "localhost", "testserver"}:
+        # include localhost variants already in explicit list
+        continue
+    if not h.startswith("http://") and not h.startswith("https://"):
+        derived_csrf.append(f"https://{h}")
+        derived_csrf.append(f"http://{h}")
+
+CSRF_TRUSTED_ORIGINS = []
+seen = set()
+for s in _explicit_csrf + derived_csrf:
+    if s not in seen:
+        CSRF_TRUSTED_ORIGINS.append(s)
+        seen.add(s)
+
+# Google Calendar scopes. If not set, default to the same scopes as Google Sheets
+GOOGLE_CALENDAR_SCOPES = [
+    scope.strip()
+    for scope in (os.getenv("GOOGLE_CALENDAR_SCOPES") or ",".join(GOOGLE_SHEETS_SCOPES)).split(",")
+    if scope.strip()
+]
+
 WAHA_DB_HOST = os.getenv("WAHA_DB_HOST") or ""
 WAHA_DB_PORT = int((os.getenv("WAHA_DB_PORT") or "0"))
 WAHA_DB_NAME = os.getenv("WAHA_DB_NAME") or ""
@@ -148,6 +183,8 @@ JAZZMIN_SETTINGS = {
         "auth.Group": "fas fa-users",
         "mcp_gateway": "fas fa-plug",
         "mcp_gateway.AccessLog": "fas fa-clock-rotate-left",
+        "crm": "fas fa-address-book",
+        "crm.Customer": "fas fa-user",
     },
     "topmenu_links": [
         {"name": "Home", "url": "admin:index", "permissions": ["auth.view_user"]},

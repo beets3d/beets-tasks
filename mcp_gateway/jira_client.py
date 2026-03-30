@@ -201,3 +201,57 @@ class JiraClient:
             "maxResults": payload.get("maxResults", safe_max),
             "comments": out,
         }
+
+    def create_issue_link(self, source_issue: str, target_issue: str, link_type: str = "Relates", comment: str | None = None) -> dict[str, Any]:
+        """Create an issue link between two issues.
+
+        Arguments:
+            source_issue: the issue key that will be the source (inward side)
+            target_issue: the issue key that will be the target (outward side)
+            link_type: the link name (e.g. "Relates", "Blocks", "Relates to")
+            comment: optional comment to add with the link
+        """
+        # Validate allowed projects
+        self.ensure_issue_allowed(source_issue)
+        self.ensure_issue_allowed(target_issue)
+
+        payload: dict[str, Any] = {
+            "type": {"name": link_type},
+            "inwardIssue": {"key": source_issue},
+            "outwardIssue": {"key": target_issue},
+        }
+        if comment:
+            payload["comment"] = {
+                "body": {
+                    "type": "doc",
+                    "version": 1,
+                    "content": [
+                        {
+                            "type": "paragraph",
+                            "content": [{"type": "text", "text": str(comment)}],
+                        }
+                    ],
+                }
+            }
+
+        return self._request("POST", "/rest/api/3/issueLink", json=payload)
+
+    def create_remote_link(self, issue_key: str, url: str, title: str | None = None, summary: str | None = None) -> dict[str, Any]:
+        """Create a remote link (external URL) on an issue.
+
+        Arguments:
+            issue_key: issue key to attach the remote link to
+            url: the external URL
+            title: optional title for the link
+            summary: optional summary/description
+        """
+        self.ensure_issue_allowed(issue_key)
+
+        obj: dict[str, Any] = {"url": url}
+        if title:
+            obj["title"] = title
+        if summary:
+            obj["summary"] = summary
+
+        payload = {"object": obj}
+        return self._request("POST", f"/rest/api/3/issue/{issue_key}/remotelink", json=payload)

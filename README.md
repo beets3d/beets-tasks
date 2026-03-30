@@ -475,6 +475,7 @@ Google Sheets variables (for `google_sheets_*` tools):
 - `GOOGLE_SHEETS_REFRESH_TOKEN`
 - `GOOGLE_SHEETS_DEFAULT_SPREADSHEET_ID`
 - `GOOGLE_SHEETS_SCOPES`
+- `GOOGLE_CALENDAR_SCOPES`
 
 OpenClaw-specific notes:
 
