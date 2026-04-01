@@ -960,8 +960,16 @@ def _handle_tool_call(name: str, arguments: dict[str, Any], client: JiraClient) 
         offset = max(0, int(arguments.get("offset", 0)))
 
         qs = Customer.objects.all()
+        # ctype may be an id or a key string
         if ctype:
-            qs = qs.filter(customer_type=str(ctype))
+            try:
+                cid_val = int(ctype)
+            except Exception:
+                cid_val = None
+            if cid_val:
+                qs = qs.filter(customer_type__id=cid_val)
+            else:
+                qs = qs.filter(customer_type__key=str(ctype))
         if important is not None:
             qs = qs.filter(important=bool(important))
         if query_text:
@@ -977,15 +985,28 @@ def _handle_tool_call(name: str, arguments: dict[str, Any], client: JiraClient) 
                 "id": obj.id,
                 "name": obj.name,
                 "external_id": obj.external_id,
+                "website_url": obj.website_url,
+                        "attn": obj.attn,
+                        "fax": obj.fax,
+                "street_address": obj.street_address,
+                "city": obj.city,
+                "state": obj.state,
+                "zip_code": obj.zip_code,
+                "country": obj.country,
                 "company_name": obj.company_name,
                 "email": obj.email,
                 "phone": obj.phone,
                 "mobile": obj.mobile,
+                "attn_2": obj.attn_2,
+                "phone_2": obj.phone_2,
+                "email_2": obj.email_2,
+                "attn_3": obj.attn_3,
+                "phone_3": obj.phone_3,
+                "email_3": obj.email_3,
                 "important": obj.important,
-                "customer_type": obj.customer_type,
+                "customer_type": (obj.customer_type.key if getattr(obj, "customer_type", None) else None),
                 "last_contact": obj.last_contact.isoformat() if obj.last_contact else None,
                 "sheet_last_updated": obj.sheet_last_updated.isoformat() if obj.sheet_last_updated else None,
-                "sheet_tag": obj.sheet_tag,
                 "updated_at": obj.updated_at.isoformat() if obj.updated_at else None,
             })
 
@@ -1009,18 +1030,125 @@ def _handle_tool_call(name: str, arguments: dict[str, Any], client: JiraClient) 
             "country": obj.country,
             "zip_code": obj.zip_code,
             "email": obj.email,
+            "attn": obj.attn,
+            "fax": obj.fax,
             "phone": obj.phone,
             "mobile": obj.mobile,
+            "attn_2": obj.attn_2,
+            "phone_2": obj.phone_2,
+            "email_2": obj.email_2,
+            "attn_3": obj.attn_3,
+            "phone_3": obj.phone_3,
+            "email_3": obj.email_3,
+            "website_url": obj.website_url,
+            "profile": obj.profile,
             "remark": obj.remark,
             "important": obj.important,
-            "customer_type": obj.customer_type,
+            "customer_type": (obj.customer_type.key if getattr(obj, "customer_type", None) else None),
             "last_contact": obj.last_contact.isoformat() if obj.last_contact else None,
             "sheet_last_updated": obj.sheet_last_updated.isoformat() if obj.sheet_last_updated else None,
             "sheet_updated_by": obj.sheet_updated_by,
-            "sheet_tag": obj.sheet_tag,
             "updated_at": obj.updated_at.isoformat() if obj.updated_at else None,
         }
 
+    if name == "crm_create_customer":
+        fields = arguments.get("fields", {}) or {}
+        if not isinstance(fields, dict):
+            raise JiraClientError("fields must be an object")
+
+        # map common aliases
+        if "type" in fields and "customer_type" not in fields:
+            fields["customer_type"] = fields.get("type")
+        if "url" in fields and "website_url" not in fields:
+            fields["website_url"] = fields.get("url")
+        if "bio" in fields and "profile" not in fields:
+            fields["profile"] = fields.get("bio")
+        if "address" in fields and "street_address" not in fields:
+            fields["street_address"] = fields.get("address")
+        if "addr" in fields and "street_address" not in fields:
+            fields["street_address"] = fields.get("addr")
+        if "street" in fields and "street_address" not in fields:
+            fields["street_address"] = fields.get("street")
+
+        allowed = {
+            "name",
+            "external_id",
+            "company_name",
+            "street_address",
+            "city",
+            "state",
+            "country",
+            "zip_code",
+            "website_url",
+            "email",
+            "attn",
+            "fax",
+            "phone",
+            "mobile",
+            "attn_2",
+            "phone_2",
+            "email_2",
+            "attn_3",
+            "phone_3",
+            "email_3",
+            "remark",
+            "important",
+            "customer_type",
+            "last_contact",
+            "profile",
+            "latitude",
+            "longitude",
+        }
+
+        from crm.models import Customer as _Customer
+
+        obj = _Customer()
+
+        for k, v in fields.items():
+            if k not in allowed:
+                continue
+            if k in {"latitude", "longitude"}:
+                try:
+                    setattr(obj, k, float(v) if v not in (None, "") else None)
+                except Exception:
+                    setattr(obj, k, None)
+                continue
+            if k == "last_contact":
+                try:
+                    from django.utils.dateparse import parse_datetime
+
+                    parsed = parse_datetime(str(v))
+                    obj.last_contact = parsed
+                except Exception:
+                    obj.last_contact = None
+            elif k == "important":
+                if isinstance(v, str):
+                    obj.important = str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
+                else:
+                    obj.important = bool(v)
+            elif k == "customer_type":
+                if v is None or str(v).strip() == "":
+                    obj.customer_type = None
+                else:
+                    from crm.models import CustomerType
+
+                    ct = None
+                    try:
+                        cid_val = int(v)
+                    except Exception:
+                        cid_val = None
+                    if cid_val:
+                        ct = CustomerType.objects.filter(id=cid_val).first()
+                    if not ct:
+                        ct = CustomerType.objects.filter(key=str(v)).first()
+                    if not ct:
+                        ct = CustomerType.objects.create(key=str(v), label=str(v))
+                    obj.customer_type = ct
+            else:
+                setattr(obj, k, v)
+
+        obj.save()
+        return {"id": obj.id, "created": True}
     if name == "crm_update_customer":
         cid = int(arguments.get("id", 0))
         fields = arguments.get("fields", {}) or {}
@@ -1035,6 +1163,19 @@ def _handle_tool_call(name: str, arguments: dict[str, Any], client: JiraClient) 
         # allow 'type' as an alias for 'customer_type'
         if "type" in fields and "customer_type" not in fields:
             fields["customer_type"] = fields.get("type")
+        # allow 'url' as an alias for website_url
+        if "url" in fields and "website_url" not in fields:
+            fields["website_url"] = fields.get("url")
+        # allow 'bio' as an alias for profile
+        if "bio" in fields and "profile" not in fields:
+            fields["profile"] = fields.get("bio")
+        # allow common address aliases to map to 'street_address'
+        if "address" in fields and "street_address" not in fields:
+            fields["street_address"] = fields.get("address")
+        if "addr" in fields and "street_address" not in fields:
+            fields["street_address"] = fields.get("addr")
+        if "street" in fields and "street_address" not in fields:
+            fields["street_address"] = fields.get("street")
 
         allowed = {
             "name",
@@ -1044,20 +1185,35 @@ def _handle_tool_call(name: str, arguments: dict[str, Any], client: JiraClient) 
             "state",
             "country",
             "zip_code",
+            "website_url",
             "email",
+            "attn",
+            "fax",
             "phone",
             "mobile",
+            "attn_2",
+            "phone_2",
+            "email_2",
+            "attn_3",
+            "phone_3",
+            "email_3",
             "remark",
             "important",
             "customer_type",
             "last_contact",
+            "profile",
+            "latitude",
+            "longitude",
         }
-
-        # allowed customer_type values
-        allowed_types = [t[0] for t in getattr(Customer, "CUSTOMER_TYPE_CHOICES", [])]
 
         for k, v in fields.items():
             if k not in allowed:
+                continue
+            if k in {"latitude", "longitude"}:
+                try:
+                    setattr(obj, k, float(v) if v not in (None, "") else None)
+                except Exception:
+                    setattr(obj, k, None)
                 continue
             if k == "last_contact":
                 try:
@@ -1074,13 +1230,25 @@ def _handle_tool_call(name: str, arguments: dict[str, Any], client: JiraClient) 
                 else:
                     obj.important = bool(v)
             elif k == "customer_type":
-                if v is None:
-                    obj.customer_type = ""
+                # accept numeric id or key string
+                if v is None or str(v).strip() == "":
+                    obj.customer_type = None
                 else:
-                    val = str(v)
-                    if allowed_types and val not in allowed_types:
-                        raise JiraClientError(f"invalid customer_type: {val}")
-                    obj.customer_type = val
+                    from crm.models import CustomerType
+
+                    ct = None
+                    try:
+                        cid_val = int(v)
+                    except Exception:
+                        cid_val = None
+                    if cid_val:
+                        ct = CustomerType.objects.filter(id=cid_val).first()
+                    if not ct:
+                        ct = CustomerType.objects.filter(key=str(v)).first()
+                    if not ct:
+                        # create new CustomerType if missing
+                        ct = CustomerType.objects.create(key=str(v), label=str(v))
+                    obj.customer_type = ct
             else:
                 setattr(obj, k, v)
 

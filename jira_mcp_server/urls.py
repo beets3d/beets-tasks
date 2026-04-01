@@ -6,6 +6,7 @@ from django.views.static import serve
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include("mcp_gateway.urls")),
+    path("crm/", include("crm.urls")),
 ]
 
 # Serve static files for admin assets in this API service deployment.

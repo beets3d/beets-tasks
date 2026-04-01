@@ -1,0 +1,66 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="referrer" content="origin">
+  <title>HK Schools Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    #map { height: 90vh; width: 100%; }
+    body { margin: 0; padding: 0; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="map-count" style="position: absolute; top: 12px; left: 12px; z-index: 1000; background: rgba(255,255,255,0.9); padding:8px 12px; border-radius:6px; font-family: sans-serif; box-shadow:0 1px 4px rgba(0,0,0,0.3)">
+    <strong>Schools:</strong> <span id="total-count">0</span>
+    &nbsp;•&nbsp; Plotted: <span id="plotted-count">0</span>
+  </div>
+  <div id="map-note" style="padding:12px; font-family: sans-serif; display:none;">
+    <strong>No coordinates available</strong>
+    <div id="map-note-body"></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([22.318, 114.170], 11);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    fetch('/crm/api/schools/')
+      .then(r => r.json())
+      .then(data => {
+        const items = data.items || [];
+        document.getElementById('total-count').textContent = items.length;
+        const hasCoords = items.some(item => item.lat != null && item.lng != null);
+        if (!hasCoords) {
+          const note = document.getElementById('map-note');
+          const body = document.getElementById('map-note-body');
+          note.style.display = 'block';
+          body.innerHTML = `<p>${items.length} school(s) found but none have coordinates.</p>` +
+            '<ul>' + items.map(it => `<li>${(it.name||'').replace(/</g,'&lt;')}</li>`).join('') + '</ul>';
+          document.getElementById('plotted-count').textContent = 0;
+          return;
+        }
+
+        let plotted = 0;
+        items.forEach(item => {
+          if (item.lat == null || item.lng == null) return;
+          const m = L.marker([item.lat, item.lng]).addTo(map);
+          m.bindPopup(`<strong>${(item.name||'').replace(/</g,'&lt;')}</strong><br/>${(item.company_name||'').replace(/</g,'&lt;')}<br/>${(item.email||'').replace(/</g,'&lt;')}`);
+          plotted += 1;
+        });
+        document.getElementById('plotted-count').textContent = plotted;
+      })
+      .catch(err => {
+        console.error('Failed to load schools:', err);
+        const note = document.getElementById('map-note');
+        note.style.display = 'block';
+        document.getElementById('map-note-body').textContent = 'Failed to load school data.';
+      });
+  </script>
+</body>
+</html>

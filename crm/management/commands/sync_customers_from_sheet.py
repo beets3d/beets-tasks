@@ -85,20 +85,18 @@ class Command(BaseCommand):
         sheet_updated_index = _find_header_index(headers, ["Last Updated", "Updated On", "Updated At"]) 
         sheet_updated_by_index = _find_header_index(headers, ["Updated By", "UpdatedBy", "Updated By User"]) 
 
-        if tag_index is None:
-            raise Exception(f"Could not find tag column (tried {tag_column}). Headers: {headers}")
+        # tag column is optional now; prefer name and external_id for matching
 
         created = 0
         updated = 0
         skipped = 0
 
         for row in rows[1:]:
-            sheet_tag = str(row[tag_index]).strip() if tag_index < len(row) else ""
-            if not sheet_tag:
+            sheet_tag = str(row[tag_index]).strip() if tag_index is not None and tag_index < len(row) else ""
+            name = (str(row[name_index]).strip() if name_index is not None and name_index < len(row) else "") or sheet_tag
+            if not name:
                 skipped += 1
                 continue
-
-            name = (str(row[name_index]).strip() if name_index is not None and name_index < len(row) else "") or sheet_tag
             remark = str(row[remark_index]).strip() if remark_index is not None and remark_index < len(row) else ""
             important_raw = str(row[important_index]).strip() if important_index is not None and important_index < len(row) else ""
             last_contact_raw = str(row[last_contact_index]).strip() if last_contact_index is not None and last_contact_index < len(row) else ""
@@ -130,16 +128,14 @@ class Command(BaseCommand):
 
             important = _parse_bool(important_raw)
 
-            # try to find by sheet_tag then external id
+            # try to find by external_id then name
             obj = None
-            if sheet_tag:
-                obj = Customer.objects.filter(sheet_tag=sheet_tag).first()
-            if not obj and external_id:
+            if external_id:
                 obj = Customer.objects.filter(external_id=external_id).first()
-            if not obj and sheet_tag:
-                obj = Customer.objects.filter(name=sheet_tag).first()
+            if not obj and name:
+                obj = Customer.objects.filter(name=name).first()
             if not obj:
-                obj = Customer(sheet_tag=sheet_tag)
+                obj = Customer()
                 created += 1
             else:
                 updated += 1
@@ -172,7 +168,7 @@ class Command(BaseCommand):
             obj.sheet_updated_by = sheet_updated_by
 
             if dry_run:
-                self.stdout.write(f"[dry-run] Would save: {sheet_tag} -> name={name}, important={important}, last_contact={last_contact_dt}")
+                self.stdout.write(f"[dry-run] Would save: {name} -> name={name}, important={important}, last_contact={last_contact_dt}")
             else:
                 obj.save()
 
