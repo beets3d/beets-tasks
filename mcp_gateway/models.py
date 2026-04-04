@@ -20,3 +20,4 @@ class AccessLog(models.Model):
 
     def __str__(self) -> str:
         return f"{self.created_at.isoformat()} {self.method} {self.tool_name} {self.success}"
+

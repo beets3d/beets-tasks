@@ -32,12 +32,14 @@ class CustomerAdmin(admin.ModelAdmin):
         "mobile",
         "important",
         "last_contact",
+        "in_quickbooks",
         "sheet_last_updated",
         "updated_at",
     )
     list_editable = ("important",)
     list_filter = (
         "important",
+        "in_quickbooks",
         "customer_type",
         "country",
         ("last_contact", admin.DateFieldListFilter),
@@ -54,6 +56,7 @@ class CustomerAdmin(admin.ModelAdmin):
         ("Location", {"fields": (("latitude", "longitude"),)} ),
         ("Contact", {"fields": ("email", "website_url", ("phone", "mobile", "fax"), "attn", "last_contact")} ),
         ("CRM", {"fields": ("remark", "profile", "important")} ),
+        ("QuickBooks", {"fields": (("in_quickbooks", "quickbooks_id"),)} ),
         ("Sheet Metadata", {"fields": ("sheet_last_updated", "sheet_updated_by")} ),
         ("Timestamps", {"fields": ("created_at", "updated_at")} ),
     )

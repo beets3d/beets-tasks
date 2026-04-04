@@ -7,6 +7,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include("mcp_gateway.urls")),
     path("crm/", include("crm.urls")),
+    path("qb/", include("qb_integration.urls")),
 ]
 
 # Serve static files for admin assets in this API service deployment.

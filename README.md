@@ -477,6 +477,19 @@ Google Sheets variables (for `google_sheets_*` tools):
 - `GOOGLE_SHEETS_SCOPES`
 - `GOOGLE_CALENDAR_SCOPES`
 
+QuickBooks variables:
+
+- `QUICKBOOKS_CLIENT_ID`
+- `QUICKBOOKS_CLIENT_SECRET`
+- `QUICKBOOKS_ENVIRONMENT` (`sandbox` or `production`)
+- `QUICKBOOKS_REDIRECT_URI`
+- `QUICKBOOKS_REFRESH_TOKEN`
+- `QUICKBOOKS_REALM_ID`
+
+QuickBooks token bootstrap:
+
+- Run `python3 scripts/get_quickbooks_refresh_token.py --listen --write-env` to launch OAuth, capture callback, and write `QUICKBOOKS_REFRESH_TOKEN` plus `QUICKBOOKS_REALM_ID` into `.env`.
+
 OpenClaw-specific notes:
 
 - `openclaw_sheets_*` tools use `GOOGLE_SHEETS_DEFAULT_SPREADSHEET_ID` so clients do not need to pass `spreadsheetId` each call.

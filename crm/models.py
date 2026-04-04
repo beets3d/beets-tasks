@@ -35,6 +35,10 @@ class Customer(models.Model):
     important = models.BooleanField(default=False)
     last_contact = models.DateTimeField(null=True, blank=True)
 
+    # QuickBooks Integration
+    quickbooks_id = models.CharField(max_length=64, blank=True, help_text="QuickBooks Customer ID", db_index=True)
+    in_quickbooks = models.BooleanField(default=False, help_text="Indicates if this customer is synced with QuickBooks")
+
 
 
     # customer_type is now a foreign key to CustomerType (see below)

@@ -14,6 +14,7 @@ from .jira_client import JiraClient, JiraClientError, JiraForbiddenProjectError
 from .models import AccessLog
 from .waha_client import WahaClient, WahaClientError
 from crm.models import Customer
+from qb_integration.client import QuickBooksClient, QuickBooksClientError
 
 
 def _parse_sheet_date(raw: str) -> date | None:
@@ -117,6 +118,12 @@ READ_TOOLS = {
     "openclaw_sheets_find_expiring_courses",
     "crm_list_customers",
     "crm_get_customer",
+    "qb_get_estimate",
+    "qb_query_estimates",
+    "qb_get_invoice",
+    "qb_query_invoices",
+    "qb_get_item",
+    "qb_query_items",
 }
 
 WRITE_TOOLS = {
@@ -541,6 +548,90 @@ def _tools_description() -> list[dict[str, Any]]:
                     "required": ["id", "fields"],
                     "additionalProperties": False,
                 }
+            },
+            {
+                "name": "qb_get_estimate",
+                "description": "Fetch a QuickBooks Estimate by its ID.",
+                "accessType": "read",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "minorversion": {"type": "integer"}
+                    },
+                    "required": ["id"],
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "qb_query_estimates",
+                "description": "Execute a QuickBooks SQL query to find Estimates (e.g., select * from Estimate where CustomerRef = '123').",
+                "accessType": "read",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"},
+                        "minorversion": {"type": "integer"}
+                    },
+                    "required": ["query"],
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "qb_get_invoice",
+                "description": "Fetch a QuickBooks Invoice by its ID.",
+                "accessType": "read",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "minorversion": {"type": "integer"}
+                    },
+                    "required": ["id"],
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "qb_query_invoices",
+                "description": "Execute a QuickBooks SQL query to find Invoices (e.g., select * from Invoice where CustomerRef = '123').",
+                "accessType": "read",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"},
+                        "minorversion": {"type": "integer"}
+                    },
+                    "required": ["query"],
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "qb_get_item",
+                "description": "Fetch a QuickBooks Item (Product/Service) by its ID.",
+                "accessType": "read",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "minorversion": {"type": "integer"}
+                    },
+                    "required": ["id"],
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "qb_query_items",
+                "description": "Execute a QuickBooks SQL query to find Items (Products/Services) (e.g., select * from Item where Type = 'Service').",
+                "accessType": "read",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"},
+                        "minorversion": {"type": "integer"}
+                    },
+                    "required": ["query"],
+                    "additionalProperties": False,
+                },
             }
         ]
 
@@ -1255,6 +1346,81 @@ def _handle_tool_call(name: str, arguments: dict[str, Any], client: JiraClient) 
         obj.save()
         return {"id": obj.id, "updated": True}
 
+    if name == "qb_get_estimate":
+        qb = QuickBooksClient()
+        eid = arguments.get("id", "")
+        minor_version = arguments.get("minorversion")
+        if not eid:
+            raise JiraClientError("Estimate id is required")
+        params = {}
+        if minor_version is not None:
+            params["minorversion"] = minor_version
+        try:
+            return qb.get(f"estimate/{eid}", params=params)
+        except QuickBooksClientError as e:
+            raise JiraClientError(str(e))
+            
+    if name == "qb_query_estimates":
+        qb = QuickBooksClient()
+        query = arguments.get("query", "")
+        minor_version = arguments.get("minorversion")
+        if not query:
+            raise JiraClientError("query is required")
+        try:
+            return qb.query(query, minor_version=minor_version)
+        except QuickBooksClientError as e:
+            raise JiraClientError(str(e))
+
+    if name == "qb_get_invoice":
+        qb = QuickBooksClient()
+        iid = arguments.get("id", "")
+        minor_version = arguments.get("minorversion")
+        if not iid:
+            raise JiraClientError("Invoice id is required")
+        params = {}
+        if minor_version is not None:
+            params["minorversion"] = minor_version
+        try:
+            return qb.get(f"invoice/{iid}", params=params)
+        except QuickBooksClientError as e:
+            raise JiraClientError(str(e))
+            
+    if name == "qb_query_invoices":
+        qb = QuickBooksClient()
+        query = arguments.get("query", "")
+        minor_version = arguments.get("minorversion")
+        if not query:
+            raise JiraClientError("query is required")
+        try:
+            return qb.query(query, minor_version=minor_version)
+        except QuickBooksClientError as e:
+            raise JiraClientError(str(e))
+
+    if name == "qb_get_item":
+        qb = QuickBooksClient()
+        iid = arguments.get("id", "")
+        minor_version = arguments.get("minorversion")
+        if not iid:
+            raise JiraClientError("Item id is required")
+        params = {}
+        if minor_version is not None:
+            params["minorversion"] = minor_version
+        try:
+            return qb.get(f"item/{iid}", params=params)
+        except QuickBooksClientError as e:
+            raise JiraClientError(str(e))
+
+    if name == "qb_query_items":
+        qb = QuickBooksClient()
+        query = arguments.get("query", "")
+        minor_version = arguments.get("minorversion")
+        if not query:
+            raise JiraClientError("query is required")
+        try:
+            return qb.query(query, minor_version=minor_version)
+        except QuickBooksClientError as e:
+            raise JiraClientError(str(e))
+
     raise JiraClientError(f"Unknown tool: {name}")
 
 
@@ -1344,6 +1510,8 @@ def mcp_endpoint(request: HttpRequest) -> JsonResponse:
         response = _jsonrpc_error(rid, -32010, str(exc))
     except GoogleSheetsClientError as exc:
         response = _jsonrpc_error(rid, -32020, str(exc))
+    except QuickBooksClientError as exc:
+        response = _jsonrpc_error(rid, -32030, str(exc))
     except json.JSONDecodeError:
         response = _jsonrpc_error(rid, -32700, "Invalid JSON")
     except Exception as exc:

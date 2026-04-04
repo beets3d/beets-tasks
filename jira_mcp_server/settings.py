@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "mcp_gateway",
+    "qb_integration",
     "crm",
 ]
 
@@ -120,6 +121,12 @@ GOOGLE_SHEETS_SCOPES = [
     for scope in (os.getenv("GOOGLE_SHEETS_SCOPES") or "").split(",")
     if scope.strip()
 ]
+QUICKBOOKS_CLIENT_ID = os.getenv("QUICKBOOKS_CLIENT_ID") or ""
+QUICKBOOKS_CLIENT_SECRET = os.getenv("QUICKBOOKS_CLIENT_SECRET") or ""
+QUICKBOOKS_ENVIRONMENT = os.getenv("QUICKBOOKS_ENVIRONMENT") or "sandbox"
+QUICKBOOKS_REDIRECT_URI = os.getenv("QUICKBOOKS_REDIRECT_URI") or ""
+QUICKBOOKS_REFRESH_TOKEN = os.getenv("QUICKBOOKS_REFRESH_TOKEN") or ""
+QUICKBOOKS_REALM_ID = os.getenv("QUICKBOOKS_REALM_ID") or ""
 
 # CSRF trusted origins. Provide via env `CSRF_TRUSTED_ORIGINS` as comma-separated
 # values including scheme and port, e.g. 'http://localhost:8001,http://127.0.0.1:8001'
@@ -175,6 +182,7 @@ JAZZMIN_SETTINGS = {
     "hide_models": [],
     "order_with_respect_to": [
         "mcp_gateway",
+    "qb_integration",
         "auth",
     ],
     "icons": {
@@ -183,6 +191,10 @@ JAZZMIN_SETTINGS = {
         "auth.Group": "fas fa-users",
         "mcp_gateway": "fas fa-plug",
         "mcp_gateway.AccessLog": "fas fa-clock-rotate-left",
+        "qb_integration.QuickBooksConfig": "fas fa-file-invoice-dollar",
+        "qb_integration.QuickBooksWebhookLog": "fas fa-list",
+        "qb_integration.QuickBooksAuditLog": "fas fa-history",
+        
         "crm": "fas fa-address-book",
         "crm.Customer": "fas fa-user",
     },
